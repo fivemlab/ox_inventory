@@ -63,7 +63,13 @@ local function oxOpenInventory(invType, data)
     if invType == 'stash' then
         local id = type(data) == 'table' and (data.id or data.name) or data
         local label = type(data) == 'table' and data.label or tostring(id)
-        if id then inv:OpenStashInventory(tostring(id), label or tostring(id)) end
+        -- Owner'lı stash: her oyuncunun kendi deposu (id_ownerIdentifier)
+        if id and type(data) == 'table' and data.owner and tostring(data.owner) ~= '' then
+            id = tostring(id) .. '_' .. tostring(data.owner)
+        elseif id then
+            id = tostring(id)
+        end
+        if id and id ~= '' then inv:OpenStashInventory(id, label or id) end
         return
     end
     if invType == 'shop' then

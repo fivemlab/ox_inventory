@@ -247,8 +247,16 @@ exports('GetEmptySlot', function(source)
     return 1
 end)
 exports('GetInventoryItems', function(identifier, owner)
-    if owner == nil and type(identifier) == 'number' then return inv:LoadInventory(identifier, nil) end
-    return inv:LoadInventory(identifier, nil)
+    if type(identifier) == 'number' then
+        return inv:LoadInventory(identifier, nil) or {}
+    end
+    -- Stash: identifier = stash name, owner = player identifier (owned stash)
+    local stashId = tostring(identifier or '')
+    if owner and type(owner) == 'string' and owner ~= '' then
+        stashId = stashId .. '_' .. owner
+    end
+    if stashId == '' or stashId == '_' then return {} end
+    return inv:GetStashItems(stashId) or {}
 end)
 
 -- rcore_doorlock / ox_inventory compat: register usable item (devix-core DEVIX.UsableItem + ox_inventory:usedItem)
