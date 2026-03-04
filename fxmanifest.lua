@@ -9,8 +9,8 @@ version '2.42.1'
 
 dependencies {
     'ox_lib',
-    'devix-core',
-    'devix-inventory',
+    -- 'devix-core',
+    -- 'devix-inventory',
 }
 
 client_scripts { 'client.lua' }

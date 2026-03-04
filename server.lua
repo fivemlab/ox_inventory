@@ -119,7 +119,20 @@ local function oxSetItem(source, item, amount)
     return true
 end
 
+-- cm_armor / mm_radio vb.: slot'taki eşyanın metadata'sını güncelle (devix-inventory LoadInventory + merge info + SetInventory)
 local function oxSetMetadata(source, slot, metadata)
+    if not source or not slot or type(metadata) ~= 'table' then return false end
+    local slotNum = tonumber(slot)
+    if not slotNum or slotNum < 1 then return false end
+    local slotBased = inv:LoadInventory(source, nil)
+    if not slotBased or not slotBased[slotNum] or not slotBased[slotNum].name then return false end
+    local it = slotBased[slotNum]
+    it.info = it.info and type(it.info) == 'table' and it.info or {}
+    for k, v in pairs(metadata) do it.info[k] = v end
+    inv:SetInventory(source, slotBased)
+    if source and source > 0 then
+        TriggerClientEvent('devix-inventory:client:inventoryRefresh', source)
+    end
     return true
 end
 

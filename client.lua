@@ -60,11 +60,18 @@ local function oxSearch(searchType, items)
 end
 
 local function oxOpenInventory(invType, data)
-    if invType ~= 'stash' then return end
-    local id = type(data) == 'table' and (data.id or data.name) or data
-    local label = type(data) == 'table' and data.label or tostring(id)
-    if id then
-        inv:OpenStashInventory(tostring(id), label or tostring(id))
+    if invType == 'stash' then
+        local id = type(data) == 'table' and (data.id or data.name) or data
+        local label = type(data) == 'table' and data.label or tostring(id)
+        if id then inv:OpenStashInventory(tostring(id), label or tostring(id)) end
+        return
+    end
+    if invType == 'shop' then
+        local shopType = type(data) == 'table' and (data.type or data.id or data.name) or data
+        local label = type(data) == 'table' and data.label or tostring(shopType)
+        if shopType then
+            TriggerEvent('devix-inventory:client:openInventory', 'player', tostring(shopType), label or tostring(shopType), 'shop')
+        end
     end
 end
 
@@ -78,6 +85,24 @@ exports('displayMetadata', function() end)
 exports('GetPlayerItems', function()
     if GetResourceState('ox_lib') ~= 'started' or not lib or not lib.callback then return {} end
     return lib.callback.await('devix-inventory:oxGetPlayerItems', false) or {}
+end)
+-- cm_armor vb. client'tan GetInventory çağrısı: mevcut oyuncu envanteri (ox format items)
+exports('GetInventory', function()
+    if GetResourceState('ox_lib') ~= 'started' or not lib or not lib.callback then return { id = 0, items = {} } end
+    local items = lib.callback.await('devix-inventory:oxGetPlayerItems', false) or {}
+    local out = {}
+    for slot, it in pairs(items) do
+        if it and it.name then
+            out[tonumber(slot) or slot] = {
+                name = it.name,
+                count = it.amount or 1,
+                slot = tonumber(slot) or slot,
+                metadata = it.info or {},
+                info = it.info or {}
+            }
+        end
+    end
+    return { id = GetPlayerServerId(PlayerId()), items = out }
 end)
 
 -- s2k / ox_inventory compat: close, stash target, nearby, weight, use, weapon wheel
