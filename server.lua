@@ -148,10 +148,14 @@ local function oxItems()
 end
 
 local function oxRegisterStash(id, label, slots, weight, owner, groups, coords)
+    if not id then return true end
+    inv:RegisterStash(id, label, slots, weight, owner, groups, coords)
     return true
 end
 
 local function oxRegisterShop(shopType, data)
+    if not shopType then return true end
+    inv:RegisterShop(shopType, data)
     return true
 end
 
@@ -198,6 +202,70 @@ exports('forceOpenInventory', function(playerId, invType, data)
         local id = tostring(data.id or data.name)
         TriggerClientEvent('devix-inventory:client:openInventory', playerId, 'player', id, data.label or id, 'stash')
     end
+end)
+
+-- s2k / ox_inventory compat: extra exports
+exports('ItemList', oxItems)
+exports('setPlayerInventory', function(source, items)
+    if not source or type(items) ~= 'table' then return end
+    inv:SetInventory(source, items)
+end)
+exports('UpdateVehicle', function() return true end)
+exports('GetSlotIdWithItem', function(source, item, metadata, strict)
+    local slotNum, _ = inv:GetSlotWithItem(source, toDevixItem(item))
+    return slotNum
+end)
+exports('GetSlotIdsWithItem', function(source, item)
+    item = toDevixItem(item)
+    local list = inv:GetSlotsWithItem(source, item)
+    local out = {}
+    for _, row in ipairs(list or {}) do
+        if row.slot then out[#out + 1] = row.slot end
+    end
+    return out
+end)
+exports('GetInventory', function(source) return inv:LoadInventory(source, nil) end)
+exports('GetEmptySlot', function(source)
+    local raw = inv:LoadInventory(source, nil)
+    if not raw or type(raw) ~= 'table' then return 1 end
+    for slot = 1, 200 do
+        if not raw[slot] or not raw[slot].name then return slot end
+    end
+    return 1
+end)
+exports('GetInventoryItems', function(identifier, owner)
+    if owner == nil and type(identifier) == 'number' then return inv:LoadInventory(identifier, nil) end
+    return inv:LoadInventory(identifier, nil)
+end)
+
+-- rcore_doorlock / ox_inventory compat: register usable item (devix-core DEVIX.UsableItem + ox_inventory:usedItem)
+local RegisterUsableItemCallbacks = {}
+exports('registerUsableItem', function(itemName, cb)
+    if not itemName or type(cb) ~= 'function' then return end
+    local key = tostring(itemName):lower()
+    RegisterUsableItemCallbacks[key] = cb
+    if GetResourceState('devix-core') ~= 'started' then return end
+    local ok, DEVIX = pcall(function() return exports['devix-core']:getObjects() end)
+    if not ok or not DEVIX or type(DEVIX.UsableItem) ~= 'function' then return end
+    DEVIX.UsableItem(key, function(source, itemData)
+        local slot = (itemData and type(itemData) == 'table') and (itemData.slot or itemData.slotId) or nil
+        local meta = (itemData and type(itemData) == 'table') and (itemData.info or itemData.metadata or {}) or {}
+        TriggerEvent('ox_inventory:usedItem', source, key, slot, meta)
+        if RegisterUsableItemCallbacks[key] then
+            RegisterUsableItemCallbacks[key](source, key, slot, meta)
+        end
+    end)
+end)
+
+-- s2k / ox_inventory compat: hook system (stub — devix-inventory has no equivalent; scripts won't error)
+local hookIdCounter = 0
+exports('registerHook', function(event, cb, options)
+    if not event or type(cb) ~= 'function' then return 0 end
+    hookIdCounter = hookIdCounter + 1
+    return hookIdCounter
+end)
+exports('removeHooks', function(id)
+    -- no-op: stub
 end)
 
 -- Client GetItemCount / getCurrentWeapon icin callback

@@ -71,10 +71,62 @@ end
 exports('GetItemCount', oxGetItemCount)
 exports('getCurrentWeapon', oxGetCurrentWeapon)
 exports('Items', oxItems)
+exports('ItemList', oxItems)
 exports('Search', oxSearch)
 exports('openInventory', oxOpenInventory)
 exports('displayMetadata', function() end)
 exports('GetPlayerItems', function()
     if GetResourceState('ox_lib') ~= 'started' or not lib or not lib.callback then return {} end
     return lib.callback.await('devix-inventory:oxGetPlayerItems', false) or {}
+end)
+
+-- s2k / ox_inventory compat: close, stash target, nearby, weight, use, weapon wheel
+exports('closeInventory', function()
+    if GetResourceState('devix-inventory') ~= 'started' or not exports['devix-inventory'] then return end
+    if exports['devix-inventory'].CloseInventory then
+        exports['devix-inventory']:CloseInventory()
+    end
+end)
+exports('setStashTarget', function(id, owner)
+    -- stub: devix-inventory opens stash by id when openInventory('stash', id) is called; no persistent "target"
+end)
+exports('openNearbyInventory', function()
+    local inv = exports['devix-inventory']
+    if not inv or not inv.OpenTrunk then return end
+    local ped = PlayerPedId()
+    local vehicle = GetVehiclePedIsIn(ped, false)
+    if vehicle and vehicle ~= 0 then
+        local seat = GetPedInVehicleSeat(vehicle, -1)
+        if seat == ped then inv:OpenTrunk(vehicle)
+        else inv:OpenGlovebox(vehicle) end
+    else
+        vehicle = GetClosestVehicle(GetEntityCoords(ped), 5.0, 0, 70)
+        if vehicle and vehicle ~= 0 then inv:OpenTrunk(vehicle) end
+    end
+end)
+exports('giveItemToTarget', function(slot, amount, target)
+    -- stub: devix-inventory item transfer is via UI or server event; no direct "give to target" export
+end)
+exports('GetPlayerWeight', function()
+    return 0
+end)
+exports('GetPlayerMaxWeight', function()
+    return 120000
+end)
+exports('useItem', function(name, slot, data)
+    if not name then return end
+    TriggerServerEvent('devix-inventory:server:useItem', { name = name, slot = slot, info = data or {} })
+end)
+exports('useSlot', function(slot)
+    if GetResourceState('ox_lib') ~= 'started' or not lib or not lib.callback then return end
+    local items = lib.callback.await('devix-inventory:oxGetPlayerItems', false) or {}
+    for _, it in pairs(items) do
+        if it and (it.slot == slot or it.slot == tonumber(slot)) then
+            TriggerServerEvent('devix-inventory:server:useItem', { name = it.name, slot = it.slot, info = it.info or it.metadata or {} })
+            return
+        end
+    end
+end)
+exports('weaponWheel', function()
+    -- stub: devix-inventory may have own weapon wheel
 end)
