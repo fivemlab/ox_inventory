@@ -1,0 +1,245 @@
+--[[
+  ox_inventory API — devix-inventory backend.
+  Scripts calling exports['ox_inventory']:... use devix-inventory.
+]]
+
+local inv = exports['devix-inventory']
+
+local function toDevixItem(item)
+    if item == 'money' then return 'cash' end
+    return item and tostring(item):lower() or item
+end
+
+local function toOxItem(item)
+    if item == 'cash' then return 'money' end
+    return item
+end
+
+-- devix slot item -> ox format { name, count, slot, metadata }; info for scripts that expect v.info (e.g. mm_radio)
+local function toOxSlot(slotNum, it)
+    if not it or not it.name then return nil end
+    local meta = it.info or {}
+    return {
+        name = toOxItem(it.name),
+        count = tonumber(it.amount) or 1,
+        slot = slotNum,
+        metadata = meta,
+        info = meta
+    }
+end
+
+-- AddItem: ox (source, item, amount, metadata, slot) | devix (source, item, amount, slot, info, reason)
+local function oxAddItem(source, item, amount, a4, a5, a6)
+    item = toDevixItem(item)
+    local slot, info, reason
+    if type(a4) == 'table' and (a5 == nil or type(a5) == 'number') then
+        info, slot, reason = a4, a5, a6
+    else
+        slot, info, reason = a4, a5, a6
+    end
+    local ok = inv:AddItem(source, item, amount, slot, info, reason)
+    if ok and source then
+        local count = inv:GetItemCount(source, item)
+        TriggerClientEvent('ox_inventory:itemCount', source, toOxItem(item), count)
+    end
+    return ok
+end
+
+local function oxRemoveItem(source, item, amount, a4, a5)
+    item = toDevixItem(item)
+    local slot, reason
+    if type(a4) == 'table' and (a5 == nil or type(a5) == 'number') then
+        slot, reason = a5, nil
+    else
+        slot, reason = a4, a5
+    end
+    local ok = inv:RemoveItem(source, item, amount, slot, reason)
+    if ok and source then
+        local count = inv:GetItemCount(source, item)
+        TriggerClientEvent('ox_inventory:itemCount', source, toOxItem(item), count)
+    end
+    return ok
+end
+
+local function oxGetSlot(source, slot)
+    local it = inv:GetItemBySlot(source, slot)
+    if not it then return nil end
+    return toOxSlot(slot, it)
+end
+
+local function oxGetSlotWithItem(source, item)
+    item = toDevixItem(item)
+    local slotNum, it = inv:GetSlotWithItem(source, item)
+    if not it then return nil end
+    return toOxSlot(slotNum, it)
+end
+
+local function oxGetSlotsWithItem(source, item)
+    item = toDevixItem(item)
+    local list = inv:GetSlotsWithItem(source, item)
+    local out = {}
+    for _, row in ipairs(list or {}) do
+        if row.slot and row.item then
+            out[#out + 1] = toOxSlot(row.slot, row.item)
+        end
+    end
+    return out
+end
+
+-- Search(source, 'count', { 'item1','item2' }) veya Search(source, 'count', 'item1') veya Search('count', items) client tarzi
+local function oxSearch(a1, a2, a3)
+    local source, searchType, items
+    if type(a1) == 'number' then
+        source, searchType, items = a1, a2, a3
+    else
+        source, searchType, items = nil, a1, a2
+    end
+    if searchType ~= 'count' then return nil end
+    if type(items) ~= 'table' then items = { items } end
+    if not source or source == 0 then return nil end
+    local out = {}
+    for _, name in ipairs(items) do
+        if name and name ~= '' then
+            out[name] = inv:GetItemCount(source, toDevixItem(name))
+        end
+    end
+    if #items == 1 then return out[items[1]] end
+    return out
+end
+
+local function oxSetItem(source, item, amount)
+    item = toDevixItem(item)
+    local cur = inv:GetItemCount(source, item)
+    amount = tonumber(amount) or 0
+    if amount > cur then
+        return inv:AddItem(source, item, amount - cur, nil, {}, 'ox_set')
+    elseif amount < cur then
+        return inv:RemoveItem(source, item, cur - amount, nil, 'ox_set')
+    end
+    return true
+end
+
+local function oxSetMetadata(source, slot, metadata)
+    return true
+end
+
+function oxGetCurrentWeapon(source)
+    return nil
+end
+
+-- Items() -> ox format { [name] = { label, weight, ... } }
+local function oxItems()
+    local list = inv:GetItemList()
+    if not list or type(list) ~= 'table' then return {} end
+    local out = {}
+    for name, data in pairs(list) do
+        if data and type(data) == 'table' then
+            out[toOxItem(name)] = {
+                label = data.label or name,
+                weight = data.weight or 0,
+                stack = not (data.unique),
+                close = true,
+                description = data.description or nil,
+                client = data.client or {}
+            }
+        end
+    end
+    return out
+end
+
+local function oxRegisterStash(id, label, slots, weight, owner, groups, coords)
+    return true
+end
+
+local function oxRegisterShop(shopType, data)
+    return true
+end
+
+local function oxOpenInventory(invType, data)
+    if invType == 'stash' and data then
+        local id = type(data) == 'table' and (data.id or data.name) or data
+        if id then
+            inv:OpenInventory(GetPlayerServerId(PlayerId()), tostring(id), data)
+        end
+    end
+end
+
+exports('AddItem', oxAddItem)
+exports('RemoveItem', oxRemoveItem)
+exports('GetItemCount', function(source, item, metadata, target)
+    local src = (source and source ~= 0) and source or target
+    return inv:GetItemCount(src, toDevixItem(item))
+end)
+exports('GetSlot', oxGetSlot)
+exports('GetSlotWithItem', oxGetSlotWithItem)
+exports('GetSlotsWithItem', oxGetSlotsWithItem)
+exports('ClearInventory', function(source) return inv:ClearInventory(source) end)
+exports('Search', oxSearch)
+exports('SetItem', oxSetItem)
+exports('SetMetadata', oxSetMetadata)
+exports('GetCurrentWeapon', oxGetCurrentWeapon)
+exports('CanCarryItem', function(source, item, amount) return inv:CanCarryItem(source, toDevixItem(item), amount) end)
+exports('Items', oxItems)
+exports('RegisterStash', oxRegisterStash)
+exports('RegisterShop', oxRegisterShop)
+exports('CustomDrop', function() return true end)
+exports('GetPlayerItems', function()
+    if GetResourceState('ox_lib') ~= 'started' or not lib or not lib.callback then return {} end
+    return lib.callback.await('devix-inventory:oxGetPlayerItems', false) or {}
+end)
+exports('GetItem', function(source, item, metadata, strict)
+    local slotNum, it = inv:GetSlotWithItem(source, toDevixItem(item))
+    if not it then return nil end
+    return toOxSlot(slotNum or 0, it)
+end)
+exports('displayMetadata', function() end)
+exports('forceOpenInventory', function(playerId, invType, data)
+    if invType == 'stash' and data and (data.id or data.name) then
+        local id = tostring(data.id or data.name)
+        TriggerClientEvent('devix-inventory:client:openInventory', playerId, 'player', id, data.label or id, 'stash')
+    end
+end)
+
+-- Client GetItemCount / getCurrentWeapon icin callback
+if GetResourceState('ox_lib') == 'started' and lib and lib.callback then
+    lib.callback.register('devix-inventory:oxCompatGetItemCount', function(source, item)
+        return inv:GetItemCount(source, toDevixItem(item))
+    end)
+    lib.callback.register('devix-inventory:oxCompatGetCurrentWeapon', function(source)
+        return oxGetCurrentWeapon(source)
+    end)
+    lib.callback.register('devix-inventory:oxGetPlayerItems', function(source)
+        local raw = inv:LoadInventory(source, nil)
+        if not raw then return {} end
+        local out = {}
+        for slot, it in pairs(raw) do
+            if it and it.name then
+                out[slot] = { name = toOxItem(it.name), amount = it.amount or 1, info = it.info or {}, slot = slot }
+            end
+        end
+        return out
+    end)
+    lib.callback.register('devix-inventory:oxCompatSearchSlots', function(source, items)
+        if not source or source == 0 then return {} end
+        if type(items) ~= 'table' then items = { items } end
+        local out = {}
+        local seen = {}
+        for _, name in ipairs(items) do
+            if name and name ~= '' then
+                local list = inv:GetSlotsWithItem(source, toDevixItem(name))
+                for _, row in ipairs(list or {}) do
+                    if row.slot and row.item then
+                        local ox = toOxSlot(row.slot, row.item)
+                        if ox and not seen[row.slot] then
+                            seen[row.slot] = true
+                            out[#out + 1] = ox
+                        end
+                    end
+                end
+            end
+        end
+        return out
+    end)
+end
+
+print("^2[ox_inventory]^7 Loaded — devix-inventory backend.")

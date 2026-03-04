@@ -1,0 +1,1 @@
+# ox_inventory — API stub for devix-inventory
