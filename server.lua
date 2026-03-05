@@ -4,8 +4,7 @@
 ]]
 
 local inv = exports['devix-inventory']
-local Debug = GetConvar("ox_inventory_bridge_debug", "0") == "1"
-local function dlog(msg) if Debug then print("[ox_inventory bridge] " .. tostring(msg)) end end
+local function dlog(msg) print("[ox_inventory bridge] " .. tostring(msg)) end
 
 local function toDevixItem(item)
     if item == 'money' then return 'cash' end
@@ -259,13 +258,17 @@ exports('ClearInventory', function(sourceOrStashId, filterItems)
     local isStashId = type(sourceOrStashId) == "string" and sourceOrStashId ~= ""
     if isStashId then
         local stashId = sourceOrStashId
-        local items = inv:GetStashItems(stashId)
-        if not items or type(items) ~= "table" then return true end
-        for slot, it in pairs(items) do
-            if it and it.name and (tonumber(it.amount) or 0) > 0 then
-                local ok = pcall(function() inv:RemoveItemStash(stashId, it.name, tonumber(it.amount) or 1, slot, nil) end)
-                if not ok then dlog("ClearInventory stash remove failed: " .. tostring(stashId) .. " slot=" .. tostring(slot)) end
+        local okStash, err = pcall(function()
+            local items = inv:GetStashItems(stashId)
+            if not items or type(items) ~= "table" then return end
+            for slot, it in pairs(items) do
+                if it and it.name and (tonumber(it.amount) or 0) > 0 then
+                    inv:RemoveItemStash(stashId, it.name, tonumber(it.amount) or 1, slot, nil)
+                end
             end
+        end)
+        if not okStash then
+            dlog("ClearInventory stash failed (GetStashItems/RemoveItemStash not in devix-inventory?): " .. tostring(err))
         end
         return true
     end
