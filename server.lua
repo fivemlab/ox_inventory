@@ -4,6 +4,8 @@
 ]]
 
 local inv = exports['devix-inventory']
+local Debug = GetConvar("ox_inventory_bridge_debug", "0") == "1"
+local function dlog(msg) if Debug then print("[ox_inventory bridge] " .. tostring(msg)) end end
 
 local function toDevixItem(item)
     if item == 'money' then return 'cash' end
@@ -251,9 +253,27 @@ end)
 exports('GetSlot', oxGetSlot)
 exports('GetSlotWithItem', oxGetSlotWithItem)
 exports('GetSlotsWithItem', oxGetSlotsWithItem)
-exports('ClearInventory', function(source, filterItems)
-    if not inv or type(inv.ClearInventory) ~= "function" then return false end
-    return inv:ClearInventory(source, filterItems)
+-- ClearInventory(source | stashId): number = clear player inventory; string = clear stash (e.g. policetrash_1)
+exports('ClearInventory', function(sourceOrStashId, filterItems)
+    if not inv then dlog("ClearInventory: inv nil") return false end
+    local isStashId = type(sourceOrStashId) == "string" and sourceOrStashId ~= ""
+    if isStashId then
+        local stashId = sourceOrStashId
+        local items = inv:GetStashItems(stashId)
+        if not items or type(items) ~= "table" then return true end
+        for slot, it in pairs(items) do
+            if it and it.name and (tonumber(it.amount) or 0) > 0 then
+                local ok = pcall(function() inv:RemoveItemStash(stashId, it.name, tonumber(it.amount) or 1, slot, nil) end)
+                if not ok then dlog("ClearInventory stash remove failed: " .. tostring(stashId) .. " slot=" .. tostring(slot)) end
+            end
+        end
+        return true
+    end
+    local ok, result = pcall(function()
+        return inv:ClearInventory(sourceOrStashId, filterItems)
+    end)
+    if not ok then dlog("ClearInventory failed (source=" .. tostring(sourceOrStashId) .. "): " .. tostring(result)) return false end
+    return result
 end)
 exports('Search', oxSearch)
 exports('SetItem', oxSetItem)
@@ -261,7 +281,11 @@ exports('SetMetadata', oxSetMetadata)
 exports('GetCurrentWeapon', oxGetCurrentWeapon)
 exports('CanCarryItem', function(source, item, amount) return inv:CanCarryItem(source, toDevixItem(item), amount) end)
 exports('CanCarryWeight', function(source, weight)
-    if not inv or type(inv.CanCarryWeight) ~= "function" then return true end
+    if not inv then dlog("CanCarryWeight: inv nil, returning true") return true end
+    if type(inv.CanCarryWeight) ~= "function" then
+        dlog("CanCarryWeight: devix-inventory export missing, returning true (source=" .. tostring(source) .. " weight=" .. tostring(weight) .. ")")
+        return true
+    end
     return inv:CanCarryWeight(source, weight)
 end)
 exports('Items', oxItems)
