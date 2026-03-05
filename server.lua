@@ -89,9 +89,14 @@ local function oxAddItem(source, item, amount, a4, a5, a6)
         slot, info, reason = a4, a5, a6
     end
     local ok = inv:AddItem(source, item, amount, slot, info, reason)
-    if ok and source then
+    if ok and source and source > 0 then
         local count = inv:GetItemCount(source, item)
         TriggerClientEvent('ox_inventory:itemCount', source, toOxItem(item), count)
+        local infoDef = inv:GetSharedItemInfo(item)
+        local label = (infoDef and infoDef.label) or item
+        local image = (infoDef and infoDef.image) or "placeholder.png"
+        TriggerClientEvent("devix-inventory:client:itemNotify", source, "added", item, label, image, amount or 1)
+        TriggerClientEvent("devix-inventory:client:inventoryRefresh", source)
     end
     return ok
 end
@@ -105,9 +110,14 @@ local function oxRemoveItem(source, item, amount, a4, a5)
         slot, reason = a4, a5
     end
     local ok = inv:RemoveItem(source, item, amount, slot, reason)
-    if ok and source then
+    if ok and source and source > 0 then
         local count = inv:GetItemCount(source, item)
         TriggerClientEvent('ox_inventory:itemCount', source, toOxItem(item), count)
+        local infoDef = inv:GetSharedItemInfo(item)
+        local label = (infoDef and infoDef.label) or item
+        local image = (infoDef and infoDef.image) or "placeholder.png"
+        TriggerClientEvent("devix-inventory:client:itemNotify", source, "removed", item, label, image, amount or 1)
+        TriggerClientEvent("devix-inventory:client:inventoryRefresh", source)
     end
     return ok
 end
