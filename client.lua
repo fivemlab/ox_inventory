@@ -19,23 +19,14 @@ local function oxGetCurrentWeapon()
     return lib.callback.await('devix-inventory:oxCompatGetCurrentWeapon', false) or nil
 end
 
+-- GetItemList is server-only; client gets list via callback to avoid "No such export" from cross-context call
 local function oxItems()
-    local list = inv:GetItemList()
-    if not list or type(list) ~= 'table' then return {} end
-    local out = {}
-    for name, data in pairs(list) do
-        if data and type(data) == 'table' then
-            out[toOxItem(name)] = {
-                label = data.label or name,
-                weight = data.weight or 0,
-                stack = not (data.unique),
-                close = true,
-                description = data.description or nil,
-                client = data.client or {}
-            }
-        end
-    end
-    return out
+    if GetResourceState('ox_lib') ~= 'started' or not lib or not lib.callback then return {} end
+    local ok, list = pcall(function()
+        return lib.callback.await('ox_inventory:getItemList', false) or {}
+    end)
+    if not ok or not list or type(list) ~= 'table' then return {} end
+    return list
 end
 
 local function oxSearch(searchType, items)

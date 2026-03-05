@@ -202,10 +202,16 @@ function oxGetCurrentWeapon(source)
     return nil
 end
 
--- Items() -> ox format { [name] = { label, weight, ... } }
+-- Items() -> ox format { [name] = { label, weight, ... } }; used by crafting etc. Never return nil.
 local function oxItems()
-    local list = inv:GetItemList()
-    if not list or type(list) ~= 'table' then return {} end
+    local list
+    local ok, err = pcall(function()
+        list = inv and inv.GetItemList and inv:GetItemList() or nil
+    end)
+    if not ok or not list or type(list) ~= 'table' then
+        if not ok then dlog("GetItemList error: " .. tostring(err)) end
+        return {}
+    end
     local out = {}
     for name, data in pairs(list) do
         if data and type(data) == 'table' then
@@ -357,7 +363,7 @@ end)
 
 -- rcore_doorlock / ox_inventory compat: register usable item (devix-core DEVIX.UsableItem + ox_inventory:usedItem)
 local RegisterUsableItemCallbacks = {}
-exports('registerUsableItem', function(itemName, cb)
+exports('RegisterUsableItem', function(itemName, cb)
     if not itemName or type(cb) ~= 'function' then return end
     local key = tostring(itemName):lower()
     RegisterUsableItemCallbacks[key] = cb
@@ -385,8 +391,11 @@ exports('removeHooks', function(id)
     -- no-op: stub
 end)
 
--- Client GetItemCount / getCurrentWeapon icin callback
+-- Client Items() / GetItemList: item list is server-only; client gets it via this callback
 if GetResourceState('ox_lib') == 'started' and lib and lib.callback then
+    lib.callback.register('ox_inventory:getItemList', function()
+        return oxItems()
+    end)
     lib.callback.register('devix-inventory:oxCompatGetItemCount', function(source, item)
         return inv:GetItemCount(source, toDevixItem(item))
     end)
