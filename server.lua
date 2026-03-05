@@ -302,9 +302,17 @@ exports('GetItemDefinition', getItemDefinition)
 exports('RegisterStash', oxRegisterStash)
 exports('RegisterShop', oxRegisterShop)
 exports('CustomDrop', function() return true end)
-exports('GetPlayerItems', function()
-    if GetResourceState('ox_lib') ~= 'started' or not lib or not lib.callback then return {} end
-    return lib.callback.await('devix-inventory:oxGetPlayerItems', false) or {}
+exports('GetPlayerItems', function(source)
+    if not source or source == 0 then return {} end
+    local raw = inv and inv.LoadInventory and inv:LoadInventory(source, nil)
+    if not raw then return {} end
+    local out = {}
+    for slot, it in pairs(raw) do
+        if it and it.name then
+            out[slot] = { name = toOxItem(it.name), amount = it.amount or 1, info = it.info or {}, slot = slot }
+        end
+    end
+    return out
 end)
 exports('GetItem', function(source, item, metadata, strict)
     local slotNum, it = inv:GetSlotWithItem(source, toDevixItem(item))
@@ -391,36 +399,39 @@ exports('removeHooks', function(id)
     -- no-op: stub
 end)
 
--- Client Items() / GetItemList: item list is server-only; client gets it via this callback
-if GetResourceState('ox_lib') == 'started' and lib and lib.callback then
-    lib.callback.register('ox_inventory:getItemList', function()
-        return oxItems()
+-- Register server callbacks with devix-core so client can use DEVIX.TriggerServerCallback (no ox_lib)
+local function registerDevixCallbacks()
+    if GetResourceState('devix-core') ~= 'started' then return end
+    local DEVIX = exports['devix-core']:getObjects()
+    if not DEVIX or type(DEVIX.RegisterServerCallback) ~= 'function' then return end
+    DEVIX.RegisterServerCallback('ox_inventory:getItemList', function(source, cb)
+        cb(oxItems())
     end)
-    lib.callback.register('devix-inventory:oxCompatGetItemCount', function(source, item)
-        return inv:GetItemCount(source, toDevixItem(item))
+    DEVIX.RegisterServerCallback('devix-inventory:oxCompatGetItemCount', function(source, cb, item)
+        cb(inv and inv.GetItemCount and inv:GetItemCount(source, toDevixItem(item)) or 0)
     end)
-    lib.callback.register('devix-inventory:oxCompatGetCurrentWeapon', function(source)
-        return oxGetCurrentWeapon(source)
+    DEVIX.RegisterServerCallback('devix-inventory:oxCompatGetCurrentWeapon', function(source, cb)
+        cb(oxGetCurrentWeapon(source))
     end)
-    lib.callback.register('devix-inventory:oxGetPlayerItems', function(source)
-        local raw = inv:LoadInventory(source, nil)
-        if not raw then return {} end
+    DEVIX.RegisterServerCallback('devix-inventory:oxGetPlayerItems', function(source, cb)
+        local raw = inv and inv.LoadInventory and inv:LoadInventory(source, nil)
+        if not raw then cb({}) return end
         local out = {}
         for slot, it in pairs(raw) do
             if it and it.name then
                 out[slot] = { name = toOxItem(it.name), amount = it.amount or 1, info = it.info or {}, slot = slot }
             end
         end
-        return out
+        cb(out)
     end)
-    lib.callback.register('devix-inventory:oxCompatSearchSlots', function(source, items)
-        if not source or source == 0 then return {} end
+    DEVIX.RegisterServerCallback('devix-inventory:oxCompatSearchSlots', function(source, cb, items)
+        if not source or source == 0 then cb({}) return end
         if type(items) ~= 'table' then items = { items } end
         local out = {}
         local seen = {}
         for _, name in ipairs(items) do
             if name and name ~= '' then
-                local list = inv:GetSlotsWithItem(source, toDevixItem(name))
+                local list = inv and inv.GetSlotsWithItem and inv:GetSlotsWithItem(source, toDevixItem(name))
                 for _, row in ipairs(list or {}) do
                     if row.slot and row.item then
                         local ox = toOxSlot(row.slot, row.item)
@@ -432,8 +443,21 @@ if GetResourceState('ox_lib') == 'started' and lib and lib.callback then
                 end
             end
         end
-        return out
+        cb(out)
     end)
+    dlog("Registered server callbacks with devix-core.")
 end
+registerDevixCallbacks()
+AddEventHandler('onResourceStart', function(resName)
+    if resName == GetCurrentResourceName() then
+        registerDevixCallbacks()
+    elseif resName == 'devix-core' then
+        -- devix-core restart = DEVIX.ServerCallbacks cleared; re-register so bridge keeps working
+        CreateThread(function()
+            Wait(100)
+            registerDevixCallbacks()
+        end)
+    end
+end)
 
-print("^2[ox_inventory]^7 Loaded — devix-inventory backend.")
+print("^2[ox_inventory]^7 Loaded — devix-inventory backend (devix-core callbacks).")

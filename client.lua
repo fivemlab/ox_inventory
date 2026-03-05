@@ -1,5 +1,6 @@
 --[[
   ox_inventory API — devix-inventory backend (client).
+  Uses devix-core server callbacks (DEVIX.TriggerServerCallback) instead of ox_lib.
 ]]
 
 local inv = exports['devix-inventory']
@@ -9,21 +10,34 @@ local function toOxItem(item)
     return item
 end
 
+-- Block until server sends result via devix-core callback (replaces lib.callback.await)
+local function awaitServerCallback(name, default, ...)
+    if GetResourceState('devix-core') ~= 'started' then return default end
+    local DEVIX = exports['devix-core']:getObjects()
+    if not DEVIX or type(DEVIX.TriggerServerCallback) ~= 'function' then return default end
+    local result = nil
+    DEVIX.TriggerServerCallback(name, function(...)
+        local n = select('#', ...)
+        if n == 0 then result = default
+        elseif n == 1 then result = select(1, ...)
+        else result = { ... } end
+    end, ...)
+    while result == nil do Wait(0) end
+    return result
+end
+
 local function oxGetItemCount(item)
-    if GetResourceState('ox_lib') ~= 'started' or not lib or not lib.callback then return 0 end
-    return lib.callback.await('devix-inventory:oxCompatGetItemCount', false, item) or 0
+    return awaitServerCallback('devix-inventory:oxCompatGetItemCount', 0, item) or 0
 end
 
 local function oxGetCurrentWeapon()
-    if GetResourceState('ox_lib') ~= 'started' or not lib or not lib.callback then return nil end
-    return lib.callback.await('devix-inventory:oxCompatGetCurrentWeapon', false) or nil
+    return awaitServerCallback('devix-inventory:oxCompatGetCurrentWeapon', nil) or nil
 end
 
--- GetItemList is server-only; client gets list via callback to avoid "No such export" from cross-context call
+-- GetItemList is server-only; client gets list via devix-core callback
 local function oxItems()
-    if GetResourceState('ox_lib') ~= 'started' or not lib or not lib.callback then return {} end
     local ok, list = pcall(function()
-        return lib.callback.await('ox_inventory:getItemList', false) or {}
+        return awaitServerCallback('ox_inventory:getItemList', {}) or {}
     end)
     if not ok or not list or type(list) ~= 'table' then return {} end
     return list
@@ -32,18 +46,13 @@ end
 local function oxSearch(searchType, items)
     if type(items) ~= 'table' then items = { items } end
     if searchType == 'slots' then
-        if GetResourceState('ox_lib') ~= 'started' or not lib or not lib.callback then return {} end
-        return lib.callback.await('devix-inventory:oxCompatSearchSlots', false, items) or {}
+        return awaitServerCallback('devix-inventory:oxCompatSearchSlots', {}, items) or {}
     end
     if searchType ~= 'count' then return nil end
-    if GetResourceState('ox_lib') ~= 'started' or not lib or not lib.callback then
-        if #items == 1 then return 0 end
-        return {}
-    end
     local out = {}
     for _, name in ipairs(items) do
         if name and name ~= '' then
-            out[name] = lib.callback.await('devix-inventory:oxCompatGetItemCount', false, name) or 0
+            out[name] = awaitServerCallback('devix-inventory:oxCompatGetItemCount', 0, name) or 0
         end
     end
     if #items == 1 then return out[items[1]] end
@@ -94,13 +103,11 @@ exports('Search', oxSearch)
 exports('openInventory', oxOpenInventory)
 exports('displayMetadata', function() end)
 exports('GetPlayerItems', function()
-    if GetResourceState('ox_lib') ~= 'started' or not lib or not lib.callback then return {} end
-    return lib.callback.await('devix-inventory:oxGetPlayerItems', false) or {}
+    return awaitServerCallback('devix-inventory:oxGetPlayerItems', {}) or {}
 end)
 -- cm_armor vb. client'tan GetInventory çağrısı: mevcut oyuncu envanteri (ox format items)
 exports('GetInventory', function()
-    if GetResourceState('ox_lib') ~= 'started' or not lib or not lib.callback then return { id = 0, items = {} } end
-    local items = lib.callback.await('devix-inventory:oxGetPlayerItems', false) or {}
+    local items = awaitServerCallback('devix-inventory:oxGetPlayerItems', {}) or {}
     local out = {}
     for slot, it in pairs(items) do
         if it and it.name then
@@ -154,8 +161,7 @@ exports('useItem', function(name, slot, data)
     TriggerServerEvent('devix-inventory:server:useItem', { name = name, slot = slot, info = data or {} })
 end)
 exports('useSlot', function(slot)
-    if GetResourceState('ox_lib') ~= 'started' or not lib or not lib.callback then return end
-    local items = lib.callback.await('devix-inventory:oxGetPlayerItems', false) or {}
+    local items = awaitServerCallback('devix-inventory:oxGetPlayerItems', {}) or {}
     for _, it in pairs(items) do
         if it and (it.slot == slot or it.slot == tonumber(slot)) then
             TriggerServerEvent('devix-inventory:server:useItem', { name = it.name, slot = it.slot, info = it.info or it.metadata or {} })

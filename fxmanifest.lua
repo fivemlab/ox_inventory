@@ -8,7 +8,6 @@ author 'devix'
 version '2.42.1'
 
 dependencies {
-    -- 'ox_lib',
     -- 'devix-core',
     -- 'devix-inventory',
 }
