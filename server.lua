@@ -15,6 +15,57 @@ local function toOxItem(item)
     return item
 end
 
+-- Kullanıcının items.lua'sı: client.event / server.export / client.export ile otomatik usable (devix-core fallback)
+local BridgeItems = {}
+local function loadBridgeItems()
+    local res = GetCurrentResourceName()
+    local raw = LoadResourceFile(res, 'items.lua')
+    if not raw or raw == '' then return end
+    local fn, err = load(raw, '@items.lua', 't')
+    if not fn then return end
+    local ok, tab = pcall(fn)
+    if ok and type(tab) == 'table' then
+        for k, v in pairs(tab) do
+            if type(v) == 'table' then
+                BridgeItems[tostring(k):lower()] = v
+            end
+        end
+    end
+end
+loadBridgeItems()
+
+-- Tekil item tanımı (devix-core "no usable" fallback için): client.event, server.export, client.export
+local function getItemDefinition(itemName)
+    local key = tostring(itemName or ''):lower()
+    if key == '' then return nil end
+    local fromBridge = BridgeItems[key]
+    local list = inv:GetItemList()
+    local fromList = list and (list[key] or list[tostring(itemName)])
+    local client = {}
+    local server = {}
+    local label = key
+    if fromList and type(fromList) == 'table' then
+        label = fromList.label or label
+        if fromList.client and type(fromList.client) == 'table' then
+            for k, v in pairs(fromList.client) do client[k] = v end
+        end
+        if fromList.server and type(fromList.server) == 'table' then
+            for k, v in pairs(fromList.server) do server[k] = v end
+        end
+    end
+    if fromBridge and type(fromBridge) == 'table' then
+        label = fromBridge.label or label
+        if fromBridge.client and type(fromBridge.client) == 'table' then
+            for k, v in pairs(fromBridge.client) do client[k] = v end
+        end
+        if fromBridge.server and type(fromBridge.server) == 'table' then
+            for k, v in pairs(fromBridge.server) do server[k] = v end
+        end
+    end
+    if not (client.event or client.export or server.export) then return nil end
+    return { label = label, client = client, server = server }
+end
+
 -- devix slot item -> ox format { name, count, slot, metadata }; info for scripts that expect v.info (e.g. mm_radio)
 local function toOxSlot(slotNum, it)
     if not it or not it.name then return nil end
@@ -197,6 +248,7 @@ exports('SetMetadata', oxSetMetadata)
 exports('GetCurrentWeapon', oxGetCurrentWeapon)
 exports('CanCarryItem', function(source, item, amount) return inv:CanCarryItem(source, toDevixItem(item), amount) end)
 exports('Items', oxItems)
+exports('GetItemDefinition', getItemDefinition)
 exports('RegisterStash', oxRegisterStash)
 exports('RegisterShop', oxRegisterShop)
 exports('CustomDrop', function() return true end)

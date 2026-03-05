@@ -59,6 +59,20 @@ local function oxSearch(searchType, items)
     return out
 end
 
+RegisterNetEvent('test', function()
+    print('test')
+end)
+
+-- devix-core fallback: items.lua client.export (resource.funcName) client'ta çağrılır
+RegisterNetEvent('ox_inventory:client:useItemExport', function(exportStr, itemData)
+    if not exportStr or type(exportStr) ~= 'string' or exportStr == '' then return end
+    local res, fn = exportStr:match('^([^%.]+)%.(.+)$')
+    if not res or not fn or GetResourceState(res) ~= 'started' then return end
+    if not exports[res] or type(exports[res][fn]) ~= 'function' then return end
+    local data = (itemData and type(itemData) == 'table') and itemData or {}
+    pcall(function() exports[res][fn](data) end)
+end)
+
 local function oxOpenInventory(invType, data)
     if invType == 'stash' then
         local id = type(data) == 'table' and (data.id or data.name) or data
