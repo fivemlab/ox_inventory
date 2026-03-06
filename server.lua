@@ -16,6 +16,44 @@ local function toOxItem(item)
     return item
 end
 
+-- QB-style CreateUseableItem bridge: DEVIX her zaman devix-core'dan alınır, devix-core hazır olunca kayıt yapılır
+local usableItems = {}
+QB = QB or {}
+QB.Functions = QB.Functions or {}
+
+local function registerOneQBUsableItem(itemName, cb)
+    if GetResourceState("devix-core") ~= "started" then return end
+    local ok, DEVIX = pcall(function() return exports["devix-core"]:getObjects() end)
+    if not ok or not DEVIX or type(DEVIX.UsableItem) ~= "function" then return end
+    local key = tostring(itemName):lower()
+    DEVIX.UsableItem(key, function(source, itemData)
+        local Player = (QB.Functions and QB.Functions.GetPlayer) and QB.Functions.GetPlayer(source) or nil
+        if not Player then return end
+        cb(source, Player)
+    end)
+end
+
+local function registerAllQBUsableItems(DEVIX)
+    if not DEVIX or type(DEVIX.UsableItem) ~= "function" then return end
+    for item, cb in pairs(usableItems) do
+        if type(cb) == "function" then
+            local key = tostring(item):lower()
+            DEVIX.UsableItem(key, function(source, itemData)
+                local Player = (QB.Functions and QB.Functions.GetPlayer) and QB.Functions.GetPlayer(source) or nil
+                if not Player then return end
+                cb(source, Player)
+            end)
+        end
+    end
+end
+
+QB.Functions.CreateUseableItem = function(item, cb)
+    if not item or type(cb) ~= "function" then return end
+    local key = tostring(item):lower()
+    usableItems[key] = cb
+    registerOneQBUsableItem(key, cb)
+end
+
 -- Kullanıcının items.lua'sı: client.event / server.export / client.export ile otomatik usable (devix-core fallback)
 local BridgeItems = {}
 local function loadBridgeItems()
@@ -389,6 +427,20 @@ exports('RegisterUsableItem', function(itemName, cb)
     end)
 end)
 
+-- devix-inventory useItem öncesi çağırır; DEVIX zaten yüklü olduğu için kayıt kesin çalışır (başlangıç sırasından bağımsız)
+exports('RegisterUsablesWithDEVIX', function(DEVIX)
+    if not DEVIX or type(DEVIX.UsableItem) ~= 'function' then return end
+    DEVIX.UsableItem('phone', function(source, itemData)
+        local slot = (itemData and type(itemData) == 'table') and (itemData.slot or itemData.slotId) or nil
+        local meta = (itemData and type(itemData) == 'table') and (itemData.info or itemData.metadata or {}) or {}
+        TriggerEvent('ox_inventory:usedItem', source, 'phone', slot, meta)
+        if RegisterUsableItemCallbacks['phone'] then
+            RegisterUsableItemCallbacks['phone'](source, 'phone', slot, meta)
+        end
+    end)
+    registerAllQBUsableItems(DEVIX)
+end)
+
 -- s2k / ox_inventory compat: hook system (stub — devix-inventory has no equivalent; scripts won't error)
 local hookIdCounter = 0
 exports('registerHook', function(event, cb, options)
@@ -446,14 +498,24 @@ local function registerDevixCallbacks()
         end
         cb(out)
     end)
+    if DEVIX.UsableItem then
+        exports['ox_inventory']:RegisterUsablesWithDEVIX(DEVIX)
+        dlog("UsableItem(phone) + QB usables registered with devix-core.")
+    end
     dlog("Registered server callbacks with devix-core.")
 end
+
+-- İlk deneme (hemen) + gecikmeli deneme (devix-core bizden sonra açılırsa diye)
 registerDevixCallbacks()
+CreateThread(function()
+    Wait(2500)
+    registerDevixCallbacks()
+end)
+
 AddEventHandler('onResourceStart', function(resName)
     if resName == GetCurrentResourceName() then
         registerDevixCallbacks()
     elseif resName == 'devix-core' then
-        -- devix-core restart = DEVIX.ServerCallbacks cleared; re-register so bridge keeps working
         CreateThread(function()
             Wait(100)
             registerDevixCallbacks()

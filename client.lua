@@ -1,19 +1,24 @@
 --[[
   ox_inventory API — devix-inventory backend (client).
-  Uses devix-core server callbacks (DEVIX.TriggerServerCallback) instead of ox_lib.
-  Scripts (qbx_houserobbery, qbx_idcard, etc.) must start after this resource — ensure order in server.cfg.
+  İlk satırlar: qbx_houserobbery, qbx_idcard vb. bu export'ları hemen kullandığı için
+  hiçbir bağımlılık olmadan önce kaydediyoruz (başlangıç sırasından bağımsız çalışsın).
 ]]
+-- Kesin çözüm: export'lar en başta; diğer script'ler yüklendiğinde mutlaka mevcut olsun
+exports('Items', function() return {} end)
+exports('ItemList', function() return {} end)
+exports('GetItemList', function() return {} end)
+exports('displayMetadata', function() end)
 
-local inv = exports['devix-inventory']
-
--- Register Items and displayMetadata first so they exist even if callbacks fail later (e.g. devix-core not ready)
-local function oxItemsStub()
-    return {}
+-- devix-inventory bağımlılıkla birlikte başlar; yoksa inv nil kalır (crash önlenir)
+local inv = (GetResourceState('devix-inventory') == 'started') and exports['devix-inventory'] or nil
+local function getInv()
+    if inv then return inv end
+    if GetResourceState('devix-inventory') == 'started' then
+        inv = exports['devix-inventory']
+        return inv
+    end
+    return nil
 end
-exports('Items', oxItemsStub)
-exports('ItemList', oxItemsStub)
-exports('GetItemList', oxItemsStub)
-exports('displayMetadata', function(...) end)
 
 local function toOxItem(item)
     if item == 'cash' then return 'money' end
@@ -93,7 +98,8 @@ local function oxOpenInventory(invType, data)
         elseif id then
             id = tostring(id)
         end
-        if id and id ~= '' then inv:OpenStashInventory(id, label or id) end
+        local i = getInv()
+        if id and id ~= '' and i and i.OpenStashInventory then i:OpenStashInventory(id, label or id) end
         return
     end
     if invType == 'shop' then

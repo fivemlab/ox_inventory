@@ -7,12 +7,21 @@ description 'ox_inventory API — devix-inventory backend. Scripts that call exp
 author 'devix'
 version '2.42.1'
 
+-- qbx_houserobbery, qbx_idcard vb. bu export'ları kullanır; server.cfg'de ensure ox_inventory onlardan ÖNCE olmalı
 dependencies {
-    -- 'devix-core',
-    -- 'devix-inventory',
+    'devix-core',
+    'devix-inventory',
 }
 
 client_scripts { 'client.lua' }
 server_scripts { 'server.lua' }
+
+-- QBX vb. script'lerin arayacağı export'lar (client)
+exports {
+    'Items',
+    'ItemList',
+    'GetItemList',
+    'displayMetadata',
+}
 
 lua54 'yes'
