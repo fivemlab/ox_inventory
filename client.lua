@@ -1,7 +1,7 @@
 --[[
   ox_inventory API — devix-inventory backend (client).
-  İlk satırlar: qbx_houserobbery, qbx_idcard vb. bu export'ları hemen kullandığı için
-  hiçbir bağımlılık olmadan önce kaydediyoruz (başlangıç sırasından bağımsız çalışsın).
+  Uses devix-core server callbacks (DEVIX.TriggerServerCallback) instead of ox_lib.
+  Scripts (qbx_houserobbery, qbx_idcard, etc.) must start after this resource — ensure order in server.cfg.
 ]]
 -- Kesin çözüm: export'lar en başta; diğer script'ler yüklendiğinde mutlaka mevcut olsun
 exports('Items', function() return {} end)
