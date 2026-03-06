@@ -1,9 +1,19 @@
 --[[
   ox_inventory API — devix-inventory backend (client).
   Uses devix-core server callbacks (DEVIX.TriggerServerCallback) instead of ox_lib.
+  Scripts (qbx_houserobbery, qbx_idcard, etc.) must start after this resource — ensure order in server.cfg.
 ]]
 
 local inv = exports['devix-inventory']
+
+-- Register Items and displayMetadata first so they exist even if callbacks fail later (e.g. devix-core not ready)
+local function oxItemsStub()
+    return {}
+end
+exports('Items', oxItemsStub)
+exports('ItemList', oxItemsStub)
+exports('GetItemList', oxItemsStub)
+exports('displayMetadata', function(...) end)
 
 local function toOxItem(item)
     if item == 'cash' then return 'money' end
@@ -99,9 +109,10 @@ exports('GetItemCount', oxGetItemCount)
 exports('getCurrentWeapon', oxGetCurrentWeapon)
 exports('Items', oxItems)
 exports('ItemList', oxItems)
+exports('GetItemList', oxItems)
 exports('Search', oxSearch)
 exports('openInventory', oxOpenInventory)
-exports('displayMetadata', function() end)
+exports('displayMetadata', function(...) end)
 exports('GetPlayerItems', function()
     return awaitServerCallback('devix-inventory:oxGetPlayerItems', {}) or {}
 end)

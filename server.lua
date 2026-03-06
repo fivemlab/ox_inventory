@@ -319,7 +319,8 @@ exports('GetItem', function(source, item, metadata, strict)
     if not it then return nil end
     return toOxSlot(slotNum or 0, it)
 end)
-exports('displayMetadata', function() end)
+exports('displayMetadata', function(...) end)
+exports('GetItemList', oxItems)
 exports('forceOpenInventory', function(playerId, invType, data)
     if invType == 'stash' and data and (data.id or data.name) then
         local id = tostring(data.id or data.name)
